@@ -75,6 +75,20 @@ void server_launch(Server *server)
 
         // TODO: Handle the connection (read request, send response)
 
+        char *msg = "Nic was here!";
+        int len, bytes_sent;
+        len = strlen(msg);
+        bytes_sent = send(client_fd, msg, len, 0);
+        if (bytes_sent < 0) {
+          perror("send failed");
+          close(client_fd);
+        }
+        
+        while (bytes_sent < len) {
+          bytes_sent += send(client_fd, msg + bytes_sent, len - bytes_sent, 0);
+        }
+
+        printf("Connection closed\n");
         close(client_fd);
     }
 }

@@ -4,9 +4,9 @@
 #include <netinet/in.h>
 
 typedef struct {
-  int fd;
-  int port;
-  struct sockaddr_in address;
+  int fd; // file descriptor for the socket
+  int port; 
+  struct sockaddr_in address; 
 } Server;
 
 Server server_init(int backlog);
