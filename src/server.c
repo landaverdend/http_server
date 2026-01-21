@@ -11,10 +11,42 @@
 #include <unistd.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
-
+#include <pthread.h>
 #include "server.h"
 
 #define PORT 8080
+#define BUFFER_SIZE 4096
+
+// Structure to store client info
+typedef struct
+{
+    int client_fd;
+    struct sockaddr_in client_addr;
+} client_info_t;
+
+void *handle_client(void *arg)
+{
+    client_info_t *client = (client_info_t *)arg;
+    int client_fd = client->client_fd;
+    char buffer[BUFFER_SIZE];
+
+    printf("Thread handling connection from %s:%d\n", 
+        inet_ntoa(client->client_addr.sin_addr), 
+        ntohs(client->client_addr.sin_port));
+        
+    ssize_t bytes_read = recv(client_fd, buffer, BUFFER_SIZE - 1, 0);
+    if (bytes_read > 0) {
+        buffer[bytes_read] = '\0';
+
+        char *response = "HTTP/1.1 200 OK\r\nContent-Length: 12\r\n\r\nHello, World!";
+        send(client_fd, response, strlen(response), 0);
+    }
+   
+    close(client_fd);
+    free(client); // Free allocated struct
+
+    return NULL;
+}
 
 Server server_init(int backlog)
 {
@@ -23,14 +55,16 @@ Server server_init(int backlog)
 
     // Create socket
     server.fd = socket(AF_INET, SOCK_STREAM, 0);
-    if (server.fd < 0) {
+    if (server.fd < 0)
+    {
         perror("socket failed");
         exit(EXIT_FAILURE);
     }
 
     // Allow address reuse (helps with rapid restarts)
     int opt = 1;
-    if (setsockopt(server.fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
+    if (setsockopt(server.fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0)
+    {
         perror("setsockopt failed");
         exit(EXIT_FAILURE);
     }
@@ -41,13 +75,15 @@ Server server_init(int backlog)
     server.address.sin_port = htons(server.port);
 
     // Bind socket to address
-    if (bind(server.fd, (struct sockaddr *)&server.address, sizeof(server.address)) < 0) {
+    if (bind(server.fd, (struct sockaddr *)&server.address, sizeof(server.address)) < 0)
+    {
         perror("bind failed");
         exit(EXIT_FAILURE);
     }
 
     // Start listening
-    if (listen(server.fd, backlog) < 0) {
+    if (listen(server.fd, backlog) < 0)
+    {
         perror("listen failed");
         exit(EXIT_FAILURE);
     }
@@ -62,33 +98,28 @@ void server_launch(Server *server)
     struct sockaddr_in client_addr;
     socklen_t client_len = sizeof(client_addr);
 
-    while (1) {
+    while (1)
+    {
         int client_fd = accept(server->fd, (struct sockaddr *)&client_addr, &client_len);
         if (client_fd < 0) {
             perror("accept failed");
             continue;
         }
 
-        printf("Connection accepted from %s:%d\n",
-               inet_ntoa(client_addr.sin_addr),
-               ntohs(client_addr.sin_port));
+        // Allocate client info for the thread (thread will free it)
+        client_info_t *client = malloc(sizeof(client_info_t));
+        client->client_fd = client_fd;
+        client->client_addr = client_addr;
 
-        // TODO: Handle the connection (read request, send response)
-
-        char *msg = "Nic was here!";
-        int len, bytes_sent;
-        len = strlen(msg);
-        bytes_sent = send(client_fd, msg, len, 0);
-        if (bytes_sent < 0) {
-          perror("send failed");
-          close(client_fd);
-        }
-        
-        while (bytes_sent < len) {
-          bytes_sent += send(client_fd, msg + bytes_sent, len - bytes_sent, 0);
+        pthread_t thread;
+        if (pthread_create(&thread, NULL, handle_client, client) != 0) {
+            perror("pthread_create failed");
+            close(client_fd);
+            free(client);
+            continue;
         }
 
-        printf("Connection closed\n");
-        close(client_fd);
+        // Detach so resources are freed when thread exits
+        pthread_detach(thread);
     }
 }
