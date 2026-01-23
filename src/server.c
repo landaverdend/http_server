@@ -13,6 +13,7 @@
 #include <arpa/inet.h>
 #include <pthread.h>
 #include "server.h"
+#include "http_handler.h"
 
 #define PORT 8080
 #define BUFFER_SIZE 4096
@@ -38,8 +39,24 @@ void *handle_client(void *arg)
     if (bytes_read > 0) {
         buffer[bytes_read] = '\0';
 
-        char *response = "HTTP/1.1 200 OK\r\nContent-Length: 12\r\n\r\nHello, World!";
-        send(client_fd, response, strlen(response), 0);
+        http_request_t req;
+        if (http_parse_request(buffer, &req) == 0) {
+            printf("%s %s\n", req.method, req.path);
+
+            http_response_t res;
+            serve_static_file(req.path, &res);
+
+            char *response = http_build_response(&res);
+            send(client_fd, response, strlen(response), 0);
+            free(response);
+
+            http_free_response(&res);
+            http_free_request(&req);
+        } else {
+            // Bad request
+            char *bad = "HTTP/1.1 400 Bad Request\r\nContent-Length: 11\r\n\r\nBad Request";
+            send(client_fd, bad, strlen(bad), 0);
+        }
     }
    
     close(client_fd);

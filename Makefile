@@ -5,7 +5,7 @@ TARGET = run_server
 BUILD_DIR = build
 
 # Source files
-SOURCES = src/main.c src/server.c
+SOURCES = src/main.c src/server.c src/http_handler.c
 OBJECTS = $(patsubst src/%.c,$(BUILD_DIR)/%.o,$(SOURCES)) 
 
 # Default target
